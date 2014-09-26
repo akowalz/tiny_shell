@@ -1,5 +1,5 @@
 /***************************************************************************
- *  Title: Runtime environment 
+ *  Title: Runtime environment
  * -------------------------------------------------------------------------
  *    Purpose: Runs commands
  *    Author: Stefan Birrer
@@ -185,7 +185,7 @@ static bool ResolveExternalCmd(commandT* cmd)
     if(stat(buf, &fs) >= 0){
       if(S_ISDIR(fs.st_mode) == 0)
         if(access(buf,X_OK) == 0){/*Whether it's an executable or the user has required permisson to run it*/
-          cmd->name = strdup(buf); 
+          cmd->name = strdup(buf);
           return TRUE;
         }
     }
@@ -195,16 +195,36 @@ static bool ResolveExternalCmd(commandT* cmd)
 
 static void Exec(commandT* cmd, bool forceFork)
 {
+  int child_status;
+  pid_t child_pid = fork();
+
+  if(child_pid == 0) {
+    // if you're in the child process
+    execv(cmd->name, cmd->argv);
+
+    printf("Something failed\n");
+    exit(0);
+
+  } else if(child_pid != -1) {
+    pid_t tmp_pid;
+    do {
+      tmp_pid = wait(&child_status);
+    } while (tmp_pid != child_pid);
+
+  } else {
+    printf("Fork failed!\n");
+  }
 }
 
 static bool IsBuiltIn(char* cmd)
 {
-  return FALSE;     
+  return FALSE;
 }
 
 
 static void RunBuiltInCmd(commandT* cmd)
 {
+  printf("Builtin command got called!\n");
 }
 
 void CheckJobs()

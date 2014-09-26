@@ -74,8 +74,6 @@ int main (int argc, char *argv[])
     /* read command line */
     getCommandLine(&cmdLine, BUFSIZE);
 
-    Print(cmdLine);
-
     if(strcmp(cmdLine, "exit") == 0)
     {
       forceExit=TRUE;
