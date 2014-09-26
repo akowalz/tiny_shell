@@ -1,7 +1,7 @@
 /***************************************************************************
- *  Title: MySimpleShell 
+ *  Title: MySimpleShell
  * -------------------------------------------------------------------------
- *    Purpose: A simple shell implementation 
+ *    Purpose: A simple shell implementation
  *    Author: Stefan Birrer
  *    Version: $Revision: 1.1 $
  *    Last Modification: $Date: 2005/10/13 05:24:59 $
@@ -53,7 +53,7 @@
 /************Global Variables*********************************************/
 
 /************Function Prototypes******************************************/
-/* handles SIGINT and SIGSTOP signals */	
+/* handles SIGINT and SIGSTOP signals */
 static void sig(int);
 
 /************External Declaration*****************************************/
@@ -73,6 +73,8 @@ int main (int argc, char *argv[])
   {
     /* read command line */
     getCommandLine(&cmdLine, BUFSIZE);
+
+    Print(cmdLine);
 
     if(strcmp(cmdLine, "exit") == 0)
     {

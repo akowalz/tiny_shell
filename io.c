@@ -1,5 +1,5 @@
 /***************************************************************************
- *  Title: Input/Output 
+ *  Title: Input/Output
  * -------------------------------------------------------------------------
  *    Purpose: Handles the input and output
  *    Author: Stefan Birrer
@@ -92,6 +92,7 @@ bool IsReading()
 
 void getCommandLine(char** buf, int size)
 {
+  printf("tsh $ ");
   char ch;
   size_t used=0;
   char* cmd = *buf;
@@ -105,11 +106,12 @@ void getCommandLine(char** buf, int size)
     {
       size *= 2;
       cmd = realloc(cmd, sizeof(char)*(size+1));
-    }		
+    }
     cmd[used] = ch;
     used++;
     cmd[used] = '\0';
   }
+
   isReading = FALSE;
 }
 
