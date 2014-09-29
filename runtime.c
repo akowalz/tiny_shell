@@ -196,6 +196,7 @@ static bool ResolveExternalCmd(commandT* cmd)
 static void Exec(commandT* cmd, bool forceFork)
 {
   pid_t child_pid = fork();
+  int child_status;
 
   if(child_pid == 0) {
     // if you're in the child process
@@ -204,13 +205,18 @@ static void Exec(commandT* cmd, bool forceFork)
     printf("Something failed\n");
     exit(0);
   } else {
-    // the parent process waits
-    waitpid(child_pid, NULL, 0);
+    if (cmd->bg)
+    {
+      waitpid(child_pid, &child_status, WNOHANG);
+    } else {
+      waitpid(child_pid, &child_status, 0);
+    }
   }
 }
 
 static bool IsBuiltIn(char* cmd)
 {
+  // do we have to write this function?
   return FALSE;
 }
 
