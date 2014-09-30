@@ -96,5 +96,6 @@ int main (int argc, char *argv[])
 
 static void sig(int signo)
 {
+  //handle ctrl-c and ctrl-z here
 }
 

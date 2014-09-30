@@ -70,6 +70,7 @@ typedef struct bgjob_l {
 } bgjobL;
 
 /* the pids of the background processes */
+// This holds a linked list of all the jobs
 bgjobL *bgjobs = NULL;
 
 /************Function Prototypes******************************************/
@@ -202,12 +203,22 @@ static void Exec(commandT* cmd, bool forceFork)
     // if you're in the child process
     execv(cmd->name, cmd->argv);
 
-    printf("Something failed\n");
+    printf("Exec failed\n");
     exit(0);
   } else {
+    // you're in the parent
     if (cmd->bg)
     {
       waitpid(child_pid, &child_status, WNOHANG);
+
+      printf("Adding %d to the list of background jobs\n", child_pid);
+
+      // Free me!
+      bgjobL *new_job = malloc(sizeof(bgjobL));
+      new_job->pid = child_pid;
+      new_job->next = bgjobs;
+      bgjobs = new_job;
+
     } else {
       waitpid(child_pid, &child_status, 0);
     }
@@ -223,11 +234,61 @@ static bool IsBuiltIn(char* cmd)
 
 static void RunBuiltInCmd(commandT* cmd)
 {
-  printf("Builtin command got called!\n");
+  // handle bg, fg, jobs
+}
+
+void DeleteJob(pid_t pid)
+{
+  printf("Deleting %d.\n", pid);
+
+  bgjobL *curr = bgjobs;
+  if (pid == bgjobs->pid) {
+    // deleting the head
+    printf("Deleting the head.\n");
+    bgjobs = curr->next;
+    free(curr);
+    return;
+  } else {
+  do {
+    if (curr->next->pid == pid) {
+      //deleting from the middle
+      printf("Deleting from the middle.\n");
+      bgjobL *to_delete = curr->next;
+      curr->next = to_delete->next;
+      free(to_delete);
+      }
+    curr=curr->next;
+    } while(curr && curr->next != NULL);
+  }
 }
 
 void CheckJobs()
 {
+  // this is what we write to get the:
+  // [1] Done           ./myspin
+  // thing to print
+  bgjobL *curr = bgjobs;
+  pid_t current_pid;
+
+  int waitret, job_no, status;
+  job_no = 1;
+  printf("Checking jobs\n");
+
+  while (curr != NULL) {
+    current_pid = curr->pid;
+
+    waitret = waitpid(current_pid, &status, WNOHANG);
+    printf("Job %d's status is %d, waitpid returned %d\n", job_no, status, waitret);
+
+    if (waitret < 0) {
+      printf("[%d]  %d Done\n", job_no, current_pid);
+      DeleteJob(current_pid);
+    }
+
+    curr=curr->next;
+    job_no++;
+  }
+  printf("Finished checking all background jobs.\n");
 }
 
 
