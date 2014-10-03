@@ -92,6 +92,8 @@ static void RunBuiltInCmd(commandT*);
 static bool IsBuiltIn(char*);
 
 static void PrintJob(bgjobL*, char*);
+
+static void PrintJobsInReverse(bgjobL*);
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -248,14 +250,21 @@ static bool IsBuiltIn(char* cmd)
 static void RunBuiltInCmd(commandT* cmd)
 {
   if (strncmp(cmd->argv[0], "jobs", 4) == 0) {
-    bgjobL *curr = bgjobs;
-    int waitret, status;
-    while (curr != NULL) {
-      waitret = waitpid(curr->pid, &status, WNOHANG| WUNTRACED);
-      if (waitret == 0)
-        PrintJob(curr, "Running");
-      curr = curr->next;
-    }
+    PrintJobsInReverse(bgjobs);
+  }
+}
+
+void PrintJobsInReverse(bgjobL *head)
+{
+  if (head == NULL)
+    return;
+
+  PrintJobsInReverse(head->next);
+
+  int waitret, status;
+  waitret = waitpid(head->pid, &status, WNOHANG| WUNTRACED);
+  if (waitret == 0) {
+    PrintJob(head, "Running");
   }
 }
 
