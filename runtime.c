@@ -301,8 +301,9 @@ void CheckJobs()
 
 void PrintJob(bgjobL *job, char* status)
 {
+  int k;
   printf("[%d]   %s                   %s", job->job_no, status, job->argv[0]); // how do we get the actual job name?
-  for(int k = 1; k < job->argc; k++) {
+  for(k = 1; k < job->argc; k++) {
     printf(" %s", job->argv[k]);
     printf("\n");
   }

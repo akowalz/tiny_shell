@@ -92,7 +92,7 @@ bool IsReading()
 
 void getCommandLine(char** buf, int size)
 {
-  printf("tsh $ ");
+  //printf("tsh $ ");
   char ch;
   size_t used=0;
   char* cmd = *buf;
