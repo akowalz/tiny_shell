@@ -66,7 +66,8 @@
 
 typedef struct bgjob_l {
   int job_no;
-  // job argv
+  char **argv;
+  int argc;
   pid_t pid;
   struct bgjob_l* next;
 } bgjobL;
@@ -89,6 +90,8 @@ static void Exec(commandT*, bool);
 static void RunBuiltInCmd(commandT*);
 /* checks whether a command is a builtin command */
 static bool IsBuiltIn(char*);
+
+static void PrintJob(bgjobL*, char*);
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -218,6 +221,13 @@ static void Exec(commandT* cmd, bool forceFork)
       // add this job to the list
       bgjobL *new_job = malloc(sizeof(bgjobL));
       new_job->pid = child_pid;
+      if (bgjobs == NULL) {
+        new_job->job_no = 1;
+      } else {
+        new_job->job_no = bgjobs->job_no + 1;
+      }
+      new_job->argv = cmd->argv;
+      new_job->argc = cmd->argc;
       new_job->next = bgjobs;
       bgjobs = new_job;
 
@@ -237,12 +247,15 @@ static bool IsBuiltIn(char* cmd)
 
 static void RunBuiltInCmd(commandT* cmd)
 {
-  if (strcmp(cmd->name, "jobs")) {
+  if (strncmp(cmd->argv[0], "jobs", 4) == 0) {
     bgjobL *curr = bgjobs;
+    int waitret, status;
     while (curr != NULL) {
-
+      waitret = waitpid(curr->pid, &status, WNOHANG| WUNTRACED);
+      if (waitret == 0)
+        PrintJob(curr, "Running");
+      curr = curr->next;
     }
-
   }
 }
 
@@ -270,8 +283,7 @@ void CheckJobs()
   bgjobL *curr = bgjobs;
   pid_t current_pid;
 
-  int waitret, job_no, status;
-  job_no = 1;
+  int waitret, status;
 
   // iterate through all jobs
   while (curr != NULL) {
@@ -280,11 +292,19 @@ void CheckJobs()
     waitret = waitpid(current_pid, &status, WNOHANG);
     // check if the job is done
     if (waitret < 0) {
-      printf("[%d]   Done                    job_name args", job_no); // how do we get the actual job name?
+      PrintJob(curr, "Done");
       DeleteJob(current_pid);
     }
     curr=curr->next;
-    job_no++;
+  }
+}
+
+void PrintJob(bgjobL *job, char* status)
+{
+  printf("[%d]   %s                   %s", job->job_no, status, job->argv[0]); // how do we get the actual job name?
+  for(int k = 1; k < job->argc; k++) {
+    printf(" %s", job->argv[k]);
+    printf("\n");
   }
 }
 
