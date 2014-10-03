@@ -1,6 +1,6 @@
-/* 
- * myspin.c - A handy program for testing your tiny shell 
- * 
+/*
+ * myspin.c - A handy program for testing your tiny shell
+ *
  * usage: myspin <n>
  * Sleeps for <n> seconds in 1-second chunks.
  *
@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-int main(int argc, char **argv) 
+int main(int argc, char **argv)
 {
     int i, secs;
 
