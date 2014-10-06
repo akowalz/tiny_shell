@@ -64,12 +64,16 @@
 
 #define NBUILTINCOMMANDS (sizeof BuiltInCommands / sizeof(char*))
 
+typedef enum {RUNNING, STOPPED} status_no;
+
 typedef struct bgjob_l {
   int job_no;
   char **argv;
   int argc;
   pid_t pid;
   struct bgjob_l* next;
+  status_no status;
+  bool was_bg;
 } bgjobL;
 
 /* the pids of the background processes */
@@ -94,6 +98,10 @@ static bool IsBuiltIn(char*);
 static void PrintJob(bgjobL*, char*);
 
 static void PrintJobsInReverse(bgjobL*);
+
+static void addjob(commandT*, pid_t, bool was_bg);
+
+void StopFgProc();
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -204,46 +212,62 @@ static bool ResolveExternalCmd(commandT* cmd)
 
 static void Exec(commandT* cmd, bool forceFork)
 {
+  sigset_t mask;
+  sigemptyset(&mask);
+  sigaddset(&mask,SIGCHLD);
+  sigaddset(&mask,SIGSTOP);
+  sigaddset(&mask,SIGINT);
+  sigprocmask(SIG_BLOCK,&mask,NULL);
+
   pid_t child_pid = fork();
+
   int child_status;
 
   if(child_pid == 0) {
     // if you're in the child process
+    setpgid(0,0);
+    sigprocmask(SIG_UNBLOCK,&mask,NULL);
     execv(cmd->name, cmd->argv);
 
     printf("Exec failed\n");
-    exit(0);
   } else {
     // you're in the parent
     if (cmd->bg)
     {
       // run in the background
       waitpid(child_pid, &child_status, WNOHANG);
-
-      // add this job to the list
-      bgjobL *new_job = malloc(sizeof(bgjobL));
-      new_job->pid = child_pid;
-      if (bgjobs == NULL) {
-        new_job->job_no = 1;
-      } else {
-        new_job->job_no = bgjobs->job_no + 1;
-      }
-      new_job->argv = cmd->argv;
-      new_job->argc = cmd->argc;
-      new_job->next = bgjobs;
-      bgjobs = new_job;
-
-      // use sigprocmask here to block signals
+      addjob(cmd, child_pid, 1);
+      sigprocmask(SIG_UNBLOCK, &mask, NULL);
 
     } else {
+      addjob(cmd, child_pid, 0);
+      sigprocmask(SIG_UNBLOCK, &mask, NULL);
       waitpid(child_pid, &child_status, 0);
     }
   }
 }
 
+static void addjob(commandT* cmd, pid_t child_pid, bool was_bg)
+{
+    bgjobL *new_job = malloc(sizeof(bgjobL));
+    new_job->pid = child_pid;
+    if (bgjobs == NULL) {
+      new_job->job_no = 1;
+    } else {
+      new_job->job_no = bgjobs->job_no + 1;
+    }
+    new_job->argv = cmd->argv;
+    new_job->argc = cmd->argc;
+    new_job->next = bgjobs;
+    new_job->status = RUNNING;
+    new_job->was_bg = was_bg;
+    bgjobs = new_job;
+}
+
 static bool IsBuiltIn(char* cmd)
 {
-  return (strcmp(cmd, "jobs") == 0);
+  return (strcmp(cmd, "jobs") == 0 ||
+          strcmp(cmd, "cd") == 0);
 }
 
 
@@ -251,6 +275,9 @@ static void RunBuiltInCmd(commandT* cmd)
 {
   if (strncmp(cmd->argv[0], "jobs", 4) == 0) {
     PrintJobsInReverse(bgjobs);
+  }
+  else if(strncmp(cmd->argv[0], "cd", 2) == 0) {
+    chdir(cmd->argv[1]);
   }
 }
 
@@ -294,14 +321,13 @@ void CheckJobs()
 
   int waitret, status;
 
-  // iterate through all jobs
   while (curr != NULL) {
     current_pid = curr->pid;
 
     waitret = waitpid(current_pid, &status, WNOHANG);
-    // check if the job is done
     if (waitret < 0) {
-      PrintJob(curr, "Done");
+      if (curr->was_bg)
+        PrintJob(curr, "Done");
       DeleteJob(current_pid);
     }
     curr=curr->next;
@@ -317,7 +343,6 @@ void PrintJob(bgjobL *job, char* status)
     printf("\n");
   }
 }
-
 
 commandT* CreateCmdT(int n)
 {
@@ -343,4 +368,10 @@ void ReleaseCmdT(commandT **cmd){
   for(i = 0; i < (*cmd)->argc; i++)
     if((*cmd)->argv[i] != NULL) free((*cmd)->argv[i]);
   free(*cmd);
+}
+
+void StopFgProc() {
+  pid_t pid = waitpid(-1, NULL, WNOHANG|WUNTRACED);
+  printf("%d", pid);
+  kill(-pid, SIGINT);
 }

@@ -60,6 +60,19 @@ static void sig(int);
 
 /**************Implementation***********************************************/
 
+static void sig(int signo)
+{
+  if (signo == SIGINT) {
+    Print("\nYou hit Ctrl-c\n");
+  }
+  else if (signo == SIGTSTP) {
+    Print("\nYou hit Ctrl-z\n");
+  }
+  else if (signo == SIGCHLD) {
+    Print("\nChild is done!\n");
+  } else {}
+}
+
 int main (int argc, char *argv[])
 {
   /* Initialize command buffer */
@@ -93,12 +106,4 @@ int main (int argc, char *argv[])
   free(cmdLine);
   return 0;
 } /* end main */
-
-static void sig(int signo)
-{
-  if (signo == SIGINT)
-    Print("\nYou hit ctrl-C\n");
-  else if (signo == SIGTSTP)
-    Print("\nYou hit Ctrl-z\n");
-}
 
