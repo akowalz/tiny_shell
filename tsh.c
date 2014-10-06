@@ -96,6 +96,9 @@ int main (int argc, char *argv[])
 
 static void sig(int signo)
 {
-  //handle ctrl-c and ctrl-z here
+  if (signo == SIGINT)
+    Print("\nYou hit ctrl-C\n");
+  else if (signo == SIGTSTP)
+    Print("\nYou hit Ctrl-z\n");
 }
 
