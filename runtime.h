@@ -129,6 +129,8 @@ EXTERN void RunCmdRedirIn(commandT*, char*);
  ***********************************************************************/
 EXTERN void StopFgProc();
 
+EXTERN void TerminateFgProc();
+
 /***********************************************************************
  *  Title: Create a command structure 
  * ---------------------------------------------------------------------

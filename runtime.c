@@ -77,8 +77,9 @@ typedef struct bgjob_l {
 } bgjobL;
 
 /* the pids of the background processes */
-// This holds a linked list of all the jobs
 bgjobL *bgjobs = NULL;
+
+pid_t fg_job = 0;
 
 /************Function Prototypes******************************************/
 /* run command */
@@ -116,7 +117,7 @@ void RunCmd(commandT** cmd, int n)
   total_task = n;
   if(n == 1)
     RunCmdFork(cmd[0], TRUE);
-  else{
+  else {
     RunCmdPipe(cmd[0], cmd[1]);
     for(i = 0; i < n; i++)
       ReleaseCmdT(&cmd[i]);
@@ -240,8 +241,8 @@ static void Exec(commandT* cmd, bool forceFork)
       addjob(cmd, child_pid, 1);
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
     } else {
-      // Add the job, wait on it, then detete it.
       addjob(cmd, child_pid, 0);
+      fg_job = child_pid;
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
       waitpid(child_pid, &child_status, 0);
       DeleteJob(child_pid);
@@ -284,19 +285,11 @@ static void RunBuiltInCmd(commandT* cmd)
     chdir(cmd->argv[1]);
   }
   else if(strncmp(cmd->argv[0], "fg", 2) == 0) {
-    // IMPLEMENT ME WITH ARGUMENTS
-    // fg just needs to tell the of recently backgrounded job (the head of the
-    // list) and tell it to continue, and then wait on it (bring it to the
-    // foreground) This is actually working! it just needs to have the ability
-    // to take arguments `fg %3`
     bgjobL *curr = bgjobs;
     PrintArgs(curr);
     kill(curr->pid, SIGCONT);
     wait(&curr->pid);
   } else if(strncmp(cmd->argv[0], "bg", 2) == 0) {
-    // IMPLEMENT ME WITH ARGUMENTS
-    // bg works a lot like fg, execpt that you just tell the backgroun process
-    // to continue, you don't wait on it.
     bgjobL *curr = bgjobs;
     printf("[%d]  ", curr->job_no);
     PrintArgs(curr);
@@ -322,8 +315,6 @@ void PrintJobsInReverse(bgjobL *head)
 
   int waitret, status;
   waitret = waitpid(head->pid, &status, WNOHANG | WUNTRACED);
-  // WIFSTOPPED is the POSIX way of reading that status written from waitpid and
-  // accurately determining if it's stopped. so we're using it here for that
   if (WIFSTOPPED(status)) {
     PrintJob(head, "Stopped");
   } else {
@@ -361,9 +352,6 @@ void CheckJobs()
     current_pid = curr->pid;
     waitret = waitpid(current_pid, &status, WNOHANG);
     if (waitret < 0) {
-      // WIFEXITED Is the proper way to check if a job is done
-      // (although for some reason it's not giving the right result unless
-      // waitret is also negative..so that's still there)
       if (curr->was_bg && WIFEXITED(status)) {
         PrintJob(curr, "Done");
       }
@@ -405,24 +393,18 @@ void ReleaseCmdT(commandT **cmd){
   free(*cmd);
 }
 
-// this doesn't really work right now, but the idea was to stop all the jobs
-// that weren't backgrounded.  Right now it is also killing tsh (I think?)
-//
-// try > myspin 10
-// > [ctrl-z]
-//
-// and then you're just stuck
 void StopFgProc() {
-  bgjobL *curr = bgjobs;
-  while (curr != NULL) {
-    if (!curr->was_bg) {
-      curr->status = STOPPED;
-      if (kill(-(curr->pid), SIGTSTP) != 0)
-        printf("Error in kill\n");
-      else
-        printf("\n");
-        PrintJob(curr, "Stopped");
-    }
-    curr = curr->next;
+  printf("trying to stop %d\n", fg_job);
+  if (fg_job) {
+    if (kill(fg_job, SIGTSTP) != 0)
+      printf("Error in kill\n");
+    else
+      printf("Just ran stop\n");
   }
+}
+
+void TerminateFgProc() {
+  if (fg_job)
+    if (kill(fg_job, SIGINT) != 0)
+      printf("kill error\n");
 }

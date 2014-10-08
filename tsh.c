@@ -63,6 +63,7 @@ static void sig(int);
 static void sig(int signo)
 {
   if (signo == SIGINT) {
+    TerminateFgProc();
   }
   else if (signo == SIGTSTP) {
     StopFgProc();
