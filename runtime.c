@@ -71,15 +71,14 @@ typedef struct bgjob_l {
   char **argv;
   int argc;
   pid_t pid;
-  struct bgjob_l* next;
   status_no status;
   bool was_bg;
+  struct bgjob_l* next;
 } bgjobL;
 
 /* the pids of the background processes */
 // This holds a linked list of all the jobs
 bgjobL *bgjobs = NULL;
-// we might also need a a total of all background jobs
 
 /************Function Prototypes******************************************/
 /* run command */
@@ -101,7 +100,12 @@ static void PrintJobsInReverse(bgjobL*);
 
 static void addjob(commandT*, pid_t, bool was_bg);
 
+static void DeleteJob(pid_t);
+
 void StopFgProc();
+
+void PrintArgs(bgjobL*);
+
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -135,7 +139,6 @@ void RunCmdFork(commandT* cmd, bool fork)
 
 void RunCmdBg(commandT* cmd)
 {
-  // TODO
 }
 
 void RunCmdPipe(commandT* cmd1, commandT* cmd2)
@@ -215,7 +218,7 @@ static void Exec(commandT* cmd, bool forceFork)
   sigset_t mask;
   sigemptyset(&mask);
   sigaddset(&mask,SIGCHLD);
-  sigaddset(&mask,SIGSTOP);
+  sigaddset(&mask,SIGTSTP);
   sigaddset(&mask,SIGINT);
   sigprocmask(SIG_BLOCK,&mask,NULL);
 
@@ -231,18 +234,17 @@ static void Exec(commandT* cmd, bool forceFork)
 
     printf("Exec failed\n");
   } else {
-    // you're in the parent
     if (cmd->bg)
     {
-      // run in the background
       waitpid(child_pid, &child_status, WNOHANG);
       addjob(cmd, child_pid, 1);
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
-
     } else {
+      // Add the job, wait on it, then detete it.
       addjob(cmd, child_pid, 0);
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
       waitpid(child_pid, &child_status, 0);
+      DeleteJob(child_pid);
     }
   }
 }
@@ -267,7 +269,9 @@ static void addjob(commandT* cmd, pid_t child_pid, bool was_bg)
 static bool IsBuiltIn(char* cmd)
 {
   return (strcmp(cmd, "jobs") == 0 ||
-          strcmp(cmd, "cd") == 0);
+          strcmp(cmd, "cd") == 0 ||
+          strcmp(cmd, "fg") == 0 ||
+          strcmp(cmd, "bg") == 0);
 }
 
 
@@ -279,6 +283,34 @@ static void RunBuiltInCmd(commandT* cmd)
   else if(strncmp(cmd->argv[0], "cd", 2) == 0) {
     chdir(cmd->argv[1]);
   }
+  else if(strncmp(cmd->argv[0], "fg", 2) == 0) {
+    // IMPLEMENT ME WITH ARGUMENTS
+    // fg just needs to tell the of recently backgrounded job (the head of the
+    // list) and tell it to continue, and then wait on it (bring it to the
+    // foreground) This is actually working! it just needs to have the ability
+    // to take arguments `fg %3`
+    bgjobL *curr = bgjobs;
+    PrintArgs(curr);
+    kill(curr->pid, SIGCONT);
+    wait(&curr->pid);
+  } else if(strncmp(cmd->argv[0], "bg", 2) == 0) {
+    // IMPLEMENT ME WITH ARGUMENTS
+    // bg works a lot like fg, execpt that you just tell the backgroun process
+    // to continue, you don't wait on it.
+    bgjobL *curr = bgjobs;
+    printf("[%d]  ", curr->job_no);
+    PrintArgs(curr);
+    kill(curr->pid, SIGCONT);
+  }
+}
+
+void PrintArgs(bgjobL *job)
+{
+  // helper
+  int k = 0;
+  for (k=0;k<job->argc;k++)
+    printf("%s ", job->argv[k]);
+  printf("\n");
 }
 
 void PrintJobsInReverse(bgjobL *head)
@@ -289,8 +321,12 @@ void PrintJobsInReverse(bgjobL *head)
   PrintJobsInReverse(head->next);
 
   int waitret, status;
-  waitret = waitpid(head->pid, &status, WNOHANG| WUNTRACED);
-  if (waitret == 0) {
+  waitret = waitpid(head->pid, &status, WNOHANG | WUNTRACED);
+  // WIFSTOPPED is the POSIX way of reading that status written from waitpid and
+  // accurately determining if it's stopped. so we're using it here for that
+  if (WIFSTOPPED(status)) {
+    PrintJob(head, "Stopped");
+  } else {
     PrintJob(head, "Running");
   }
 }
@@ -323,11 +359,14 @@ void CheckJobs()
 
   while (curr != NULL) {
     current_pid = curr->pid;
-
     waitret = waitpid(current_pid, &status, WNOHANG);
     if (waitret < 0) {
-      if (curr->was_bg)
+      // WIFEXITED Is the proper way to check if a job is done
+      // (although for some reason it's not giving the right result unless
+      // waitret is also negative..so that's still there)
+      if (curr->was_bg && WIFEXITED(status)) {
         PrintJob(curr, "Done");
+      }
       DeleteJob(current_pid);
     }
     curr=curr->next;
@@ -336,12 +375,8 @@ void CheckJobs()
 
 void PrintJob(bgjobL *job, char* status)
 {
-  int k;
-  printf("[%d]   %s                   %s", job->job_no, status, job->argv[0]); // how do we get the actual job name?
-  for(k = 1; k < job->argc; k++) {
-    printf(" %s", job->argv[k]);
-    printf("\n");
-  }
+  printf("[%d]   %s                   ", job->job_no, status);
+  PrintArgs(job);
 }
 
 commandT* CreateCmdT(int n)
@@ -370,8 +405,24 @@ void ReleaseCmdT(commandT **cmd){
   free(*cmd);
 }
 
+// this doesn't really work right now, but the idea was to stop all the jobs
+// that weren't backgrounded.  Right now it is also killing tsh (I think?)
+//
+// try > myspin 10
+// > [ctrl-z]
+//
+// and then you're just stuck
 void StopFgProc() {
-  pid_t pid = waitpid(-1, NULL, WNOHANG|WUNTRACED);
-  printf("%d", pid);
-  kill(-pid, SIGINT);
+  bgjobL *curr = bgjobs;
+  while (curr != NULL) {
+    if (!curr->was_bg) {
+      curr->status = STOPPED;
+      if (kill(-(curr->pid), SIGTSTP) != 0)
+        printf("Error in kill\n");
+      else
+        printf("\n");
+        PrintJob(curr, "Stopped");
+    }
+    curr = curr->next;
+  }
 }

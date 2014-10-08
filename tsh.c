@@ -63,14 +63,13 @@ static void sig(int);
 static void sig(int signo)
 {
   if (signo == SIGINT) {
-    Print("\nYou hit Ctrl-c\n");
   }
   else if (signo == SIGTSTP) {
-    Print("\nYou hit Ctrl-z\n");
+    StopFgProc();
   }
   else if (signo == SIGCHLD) {
-    Print("\nChild is done!\n");
-  } else {}
+    // Print("Child is done!\n");
+  }
 }
 
 int main (int argc, char *argv[])
@@ -81,6 +80,7 @@ int main (int argc, char *argv[])
   /* shell initialization */
   if (signal(SIGINT, sig) == SIG_ERR) PrintPError("SIGINT");
   if (signal(SIGTSTP, sig) == SIG_ERR) PrintPError("SIGTSTP");
+  if (signal(SIGCHLD, sig) == SIG_ERR) PrintPError("SIGCHLD");
 
   while (!forceExit) /* repeat forever */
   {
