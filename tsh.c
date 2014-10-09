@@ -106,6 +106,7 @@ int main (int argc, char *argv[])
 
   /* shell termination */
   free(cmdLine);
+  freeAllJobs();
   return 0;
 } /* end main */
 

@@ -96,13 +96,11 @@ static void RunBuiltInCmd(commandT*);
 /* checks whether a command is a builtin command */
 static bool IsBuiltIn(char*);
 
-static void PrintJob(bgjobL*, char*);
+static void PrintJob(bgjobL*);
 
 static void PrintJobsInReverse(bgjobL*);
 
 static void addjob(commandT*, pid_t, bool was_bg);
-
-static void DeleteJob(pid_t);
 
 void StopFgProc();
 
@@ -111,6 +109,8 @@ void PrintArgs(bgjobL*);
 void MarkAs(pid_t, int status);
 
 int findLowestJobNo();
+
+bgjobL* GetJobByPid(pid_t);
 
 /************External Declaration*****************************************/
 
@@ -230,8 +230,6 @@ static void Exec(commandT* cmd, bool forceFork)
 
   pid_t child_pid = fork();
 
-  int child_status;
-
   if(child_pid == 0) {
     // if you're in the child process
     setpgid(0,0);
@@ -242,7 +240,6 @@ static void Exec(commandT* cmd, bool forceFork)
   } else {
     if (cmd->bg)
     {
-      waitpid(child_pid, &child_status, WNOHANG);
       addjob(cmd, child_pid, 1);
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
     } else {
@@ -252,7 +249,7 @@ static void Exec(commandT* cmd, bool forceFork)
       while (waitpid(child_pid, NULL, WNOHANG|WUNTRACED) == 0) {
 
       }
-      if (bgjobs->status != STOPPED)
+      if (GetJobByPid(fg_job)->status != STOPPED)
         MarkAs(fg_job, DONE);
     }
   }
@@ -295,6 +292,17 @@ void MarkAs(pid_t pid, int status)
   }
 }
 
+bgjobL* GetJobByPid(pid_t pid)
+{
+  bgjobL *curr = bgjobs;
+  while (curr != NULL) {
+    if (curr->pid == pid)
+      return curr;
+    curr = curr->next;
+  }
+  return NULL;
+}
+
 static bool IsBuiltIn(char* cmd)
 {
   return (strcmp(cmd, "jobs") == 0 ||
@@ -302,7 +310,6 @@ static bool IsBuiltIn(char* cmd)
           strcmp(cmd, "fg") == 0 ||
           strcmp(cmd, "bg") == 0);
 }
-
 
 static void RunBuiltInCmd(commandT* cmd)
 {
@@ -333,28 +340,20 @@ void PrintJobsInReverse(bgjobL *job)
   PrintJobsInReverse(job->next);
 
   if (job->status == STOPPED) {
-    PrintJob(job, "Stopped");
+    PrintJob(job);
   } else if (job->status == RUNNING) {
-    PrintJob(job, "Running");
+    PrintJob(job);
   }
 }
 
-void DeleteJob(pid_t pid)
+void freeAllJobs()
 {
   bgjobL *curr = bgjobs;
-  if (pid == bgjobs->pid) {
-    bgjobs = curr->next;
+  bgjobL *next;
+  while (curr != NULL) {
+    next = curr->next;
     free(curr);
-    return;
-  } else {
-  do {
-    if (curr->next->pid == pid) {
-      bgjobL *to_delete = curr->next;
-      curr->next = to_delete->next;
-      free(to_delete);
-      }
-    curr=curr->next;
-    } while(curr && curr->next != NULL);
+    curr = next;
   }
 }
 
@@ -367,17 +366,25 @@ void CheckJobs()
       (waitpid(curr->pid, NULL, WNOHANG|WUNTRACED) < 0) &&
       (curr->status != DONE))
       {
-        PrintJob(curr, "Done   ");
         curr->status = DONE;
+        PrintJob(curr);
       }
     curr=curr->next;
   }
 }
 
-void PrintJob(bgjobL *job, char* status)
+void PrintJob(bgjobL *job)
 {
+  char *status;
+  if (job->status == RUNNING)
+    status = "Running";
+  else if (job->status == STOPPED)
+    status = "Stopped";
+  else
+    status = "Done";
+
   printf("[%d]   %s                   %s", job->job_no, status, job->cmdline);
-  if (job->was_bg && (strcmp(status, "Running") == 0))
+  if (job->was_bg && job->status == RUNNING)
     printf("&");
   printf("\n");
   fflush(stdout);
@@ -414,16 +421,10 @@ void StopFgProc() {
     if (kill(-fg_job, SIGTSTP) != 0)
       printf("Error in kill\n");
     else {
-      bgjobL *curr = bgjobs;
-      while (curr != NULL) {
-        if (fg_job == curr->pid) {
-          printf("\n");
-          fflush(stdout);
-          PrintJob(curr, "Stopped");
-        }
-        curr = curr->next;
-      }
+      printf("\n");
+      fflush(stdout);
       MarkAs(fg_job, STOPPED);
+      PrintJob(GetJobByPid(fg_job));
     }
   }
 }

@@ -178,6 +178,8 @@ EXTERN void CheckJobs();
 
 EXTERN void MarkAs();
 
+EXTERN void freeAllJobs();
+
 /************External Declaration*****************************************/
 
 /**************Definition***************************************************/
