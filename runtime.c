@@ -241,11 +241,13 @@ static void Exec(commandT* cmd, bool forceFork)
       addjob(cmd, child_pid, 1);
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
     } else {
+      // while (waitpid(-1, w|w) > 0)
       addjob(cmd, child_pid, 0);
       fg_job = child_pid;
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
-      waitpid(child_pid, &child_status, 0);
-      DeleteJob(child_pid);
+      while (waitpid(child_pid, NULL, WNOHANG|WUNTRACED) == 0) {
+        sleep(1);
+      }
     }
   }
 }
@@ -314,7 +316,7 @@ void PrintJobsInReverse(bgjobL *head)
   PrintJobsInReverse(head->next);
 
   int waitret, status;
-  waitret = waitpid(head->pid, &status, WNOHANG | WUNTRACED);
+  waitret = waitpid(-head->pid, &status, WNOHANG | WUNTRACED);
   if (WIFSTOPPED(status)) {
     PrintJob(head, "Stopped");
   } else {
@@ -396,7 +398,7 @@ void ReleaseCmdT(commandT **cmd){
 void StopFgProc() {
   printf("trying to stop %d\n", fg_job);
   if (fg_job) {
-    if (kill(fg_job, SIGTSTP) != 0)
+    if (kill(-fg_job, SIGTSTP) != 0)
       printf("Error in kill\n");
     else
       printf("Just ran stop\n");

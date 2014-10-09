@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <stdio.h>
 
 /************Private include**********************************************/
 #include "tsh.h"
@@ -69,7 +70,6 @@ static void sig(int signo)
     StopFgProc();
   }
   else if (signo == SIGCHLD) {
-    // Print("Child is done!\n");
   }
 }
 
