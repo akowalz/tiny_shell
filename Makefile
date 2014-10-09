@@ -33,7 +33,7 @@ CFLAGS = -g -Wall -O2 -D HAVE_CONFIG_H
 
 DELIVERY = Makefile *.h *.c test_type
 PROGS = tsh
-SRCS = interpreter.c io.c runtime.c tsh.c 
+SRCS = interpreter.c io.c runtime.c tsh.c
 OBJS = ${SRCS:.c=.o}
 
 TESTING_SRCS = myspin.c mysplit.c mystop.c
@@ -43,7 +43,7 @@ TESTING_PROGS = myspin mysplit mystop
 VM_NAME = "Ubuntu_1404"
 VM_PORT = "3022"
 
-SHELL_ARCH = "64"
+SHELL_ARCH = "32"
 
 all: ${PROGS}
 
@@ -62,7 +62,7 @@ test-vm:
 	scp -r -i id_aqualab -P 3022 * aqualab@localhost:~/.aqualab/project1/.
 	ssh -i id_aqualab -p 3022 aqualab@localhost 'bash -s' < vm_test.sh
 
-	
+
 handin: cleanAll testing-tools
 	${TAR} ${TEAM}-${VERSION}-${PROJ}.tar ${DELIVERY}
 	${COMPRESS} ${TEAM}-${VERSION}-${PROJ}.tar
@@ -81,11 +81,11 @@ cleanAll: clean
 	cd testsuite;\
 	${RM} ${TESTING_PROGS}
 
-testing-tools: 
+testing-tools:
 	cd testsuite;\
 	${CC} -o myspin myspin.c
 	cd testsuite;\
 	${CC} -o mysplit mysplit.c
 	cd testsuite;\
 	${CC} -o mystop mystop.c
-	
+

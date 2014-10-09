@@ -64,7 +64,7 @@
 
 #define NBUILTINCOMMANDS (sizeof BuiltInCommands / sizeof(char*))
 
-typedef enum {RUNNING, STOPPED, DONE} status_no;
+typedef enum {RUNNING, STOPPED, DONE, TERMINATED} status_no;
 
 typedef struct bgjob_l {
   int job_no;
@@ -107,6 +107,10 @@ static void DeleteJob(pid_t);
 void StopFgProc();
 
 void PrintArgs(bgjobL*);
+
+void MarkAs(pid_t, int status);
+
+int findLowestJobNo();
 
 /************External Declaration*****************************************/
 
@@ -246,9 +250,10 @@ static void Exec(commandT* cmd, bool forceFork)
       fg_job = child_pid;
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
       while (waitpid(child_pid, NULL, WNOHANG|WUNTRACED) == 0) {
-        sleep(1);
+
       }
-      MarkDone(childpid);
+      if (bgjobs->status != STOPPED)
+        MarkAs(fg_job, DONE);
     }
   }
 }
@@ -257,30 +262,36 @@ static void addjob(commandT* cmd, pid_t child_pid, bool was_bg)
 {
     bgjobL *new_job = malloc(sizeof(bgjobL));
     new_job->pid = child_pid;
-    if (bgjobs == NULL) {
-      new_job->job_no = 1;
-    } else {
-      new_job->job_no = bgjobs->job_no + 1;
-    }
-    new_job->argv = cmd->argv;
-    new_job->argc = cmd->argc;
+    new_job->job_no = findLowestJobNo();
+    new_job->cmdline = cmd->cmdline;
     new_job->next = bgjobs;
     new_job->status = RUNNING;
     new_job->was_bg = was_bg;
     bgjobs = new_job;
 }
 
-void MarkDone(pid_t pid)
+int findLowestJobNo()
+{
+  bgjobL *curr = bgjobs;
+  int num = 1;
+  while (curr != NULL) {
+    if (curr->status != DONE) {// && curr->status != TERMINATED) {
+      if (curr->job_no >= num)
+        num = curr->job_no + 1;
+    }
+    curr = curr->next;
+  }
+  return num;
+}
+
+void MarkAs(pid_t pid, int status)
 {
   bgjobL *curr = bgjobs;
 
   while (curr != NULL) {
-    if (curr->pid == pid) {
-      curr->status = DONE;
-      printf("Marked %d as done\n", curr->pid);
-      fflush(stdout);
-    }
-    curr = curr->next
+    if (curr->pid == pid)
+      curr->status = status;
+    curr = curr->next;
   }
 }
 
@@ -299,43 +310,32 @@ static void RunBuiltInCmd(commandT* cmd)
     PrintJobsInReverse(bgjobs);
   }
   else if(strncmp(cmd->argv[0], "cd", 2) == 0) {
-    chdir(cmd->argv[1]);
-  }
+    if (!chdir(cmd->argv[1]))
+      printf("Error changing directory\n");
+  } /*
   else if(strncmp(cmd->argv[0], "fg", 2) == 0) {
     bgjobL *curr = bgjobs;
-    PrintArgs(curr);
     kill(curr->pid, SIGCONT);
     wait(&curr->pid);
   } else if(strncmp(cmd->argv[0], "bg", 2) == 0) {
     bgjobL *curr = bgjobs;
     printf("[%d]  ", curr->job_no);
-    PrintArgs(curr);
     kill(curr->pid, SIGCONT);
   }
+  */
 }
 
-void PrintArgs(bgjobL *job)
+void PrintJobsInReverse(bgjobL *job)
 {
-  // helper
-  int k = 0;
-  for (k=0;k<job->argc;k++)
-    printf("%s ", job->argv[k]);
-  printf("\n");
-}
-
-void PrintJobsInReverse(bgjobL *head)
-{
-  if (head == NULL)
+  if (job == NULL)
     return;
 
-  PrintJobsInReverse(head->next);
+  PrintJobsInReverse(job->next);
 
-  int waitret, status;
-  waitret = waitpid(-head->pid, &status, WNOHANG | WUNTRACED);
-  if (WIFSTOPPED(status)) {
-    PrintJob(head, "Stopped");
-  } else {
-    PrintJob(head, "Running");
+  if (job->status == STOPPED) {
+    PrintJob(job, "Stopped");
+  } else if (job->status == RUNNING) {
+    PrintJob(job, "Running");
   }
 }
 
@@ -361,27 +361,26 @@ void DeleteJob(pid_t pid)
 void CheckJobs()
 {
   bgjobL *curr = bgjobs;
-  pid_t current_pid;
-
-  int waitret, status;
 
   while (curr != NULL) {
-    current_pid = curr->pid;
-    waitret = waitpid(current_pid, &status, WNOHANG);
-    if (waitret < 0) {
-      if (curr->was_bg && curr->status == DONE) {
-        PrintJob(curr, "Done    ");
+    if(curr->was_bg &&
+      (waitpid(curr->pid, NULL, WNOHANG|WUNTRACED) < 0) &&
+      (curr->status != DONE))
+      {
+        PrintJob(curr, "Done   ");
+        curr->status = DONE;
       }
-      DeleteJob(current_pid);
-    }
     curr=curr->next;
   }
 }
 
 void PrintJob(bgjobL *job, char* status)
 {
-  printf("[%d]   %s                   ", job->job_no, status);
-  PrintArgs(job);
+  printf("[%d]   %s                   %s", job->job_no, status, job->cmdline);
+  if (job->was_bg && (strcmp(status, "Running") == 0))
+    printf("&");
+  printf("\n");
+  fflush(stdout);
 }
 
 commandT* CreateCmdT(int n)
@@ -411,17 +410,40 @@ void ReleaseCmdT(commandT **cmd){
 }
 
 void StopFgProc() {
-  printf("trying to stop %d\n", fg_job);
   if (fg_job) {
     if (kill(-fg_job, SIGTSTP) != 0)
       printf("Error in kill\n");
-    else
-      printf("Just ran stop\n");
+    else {
+      bgjobL *curr = bgjobs;
+      while (curr != NULL) {
+        if (fg_job == curr->pid) {
+          printf("\n");
+          fflush(stdout);
+          PrintJob(curr, "Stopped");
+        }
+        curr = curr->next;
+      }
+      MarkAs(fg_job, STOPPED);
+    }
   }
 }
 
 void TerminateFgProc() {
-  if (fg_job)
+  if (fg_job) {
     if (kill(fg_job, SIGINT) != 0)
       printf("kill error\n");
+    else
+      MarkAs(fg_job, DONE);
+  }
 }
+
+/*
+void SigChldHandler() {
+  int status, pid;
+  while((pid = waitpid(-1, &status, WNOHANG|WUNTRACED)) > 0) {
+    if (!WIFSTOPPED(status)) {
+      MarkAs(pid, DONE);
+    }
+  }
+}
+*/
