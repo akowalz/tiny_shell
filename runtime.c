@@ -64,11 +64,12 @@
 
 #define NBUILTINCOMMANDS (sizeof BuiltInCommands / sizeof(char*))
 
-typedef enum {RUNNING, STOPPED} status_no;
+typedef enum {RUNNING, STOPPED, DONE} status_no;
 
 typedef struct bgjob_l {
   int job_no;
   char **argv;
+  char *cmdline;
   int argc;
   pid_t pid;
   status_no status;
@@ -241,13 +242,13 @@ static void Exec(commandT* cmd, bool forceFork)
       addjob(cmd, child_pid, 1);
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
     } else {
-      // while (waitpid(-1, w|w) > 0)
       addjob(cmd, child_pid, 0);
       fg_job = child_pid;
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
       while (waitpid(child_pid, NULL, WNOHANG|WUNTRACED) == 0) {
         sleep(1);
       }
+      MarkDone(childpid);
     }
   }
 }
@@ -267,6 +268,20 @@ static void addjob(commandT* cmd, pid_t child_pid, bool was_bg)
     new_job->status = RUNNING;
     new_job->was_bg = was_bg;
     bgjobs = new_job;
+}
+
+void MarkDone(pid_t pid)
+{
+  bgjobL *curr = bgjobs;
+
+  while (curr != NULL) {
+    if (curr->pid == pid) {
+      curr->status = DONE;
+      printf("Marked %d as done\n", curr->pid);
+      fflush(stdout);
+    }
+    curr = curr->next
+  }
 }
 
 static bool IsBuiltIn(char* cmd)
@@ -354,8 +369,8 @@ void CheckJobs()
     current_pid = curr->pid;
     waitret = waitpid(current_pid, &status, WNOHANG);
     if (waitret < 0) {
-      if (curr->was_bg && WIFEXITED(status)) {
-        PrintJob(curr, "Done");
+      if (curr->was_bg && curr->status == DONE) {
+        PrintJob(curr, "Done    ");
       }
       DeleteJob(current_pid);
     }
