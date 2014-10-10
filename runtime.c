@@ -111,6 +111,8 @@ int findLowestJobNo();
 
 bgjobL* GetJobByPid(pid_t);
 
+void waitfg(pid_t);
+
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -245,14 +247,18 @@ static void Exec(commandT* cmd, bool forceFork)
       addjob(cmd, child_pid, 0);
       fg_job = child_pid;
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
-      while (waitpid(child_pid, NULL, WNOHANG|WUNTRACED) == 0) {
-        if (GetJobByPid(child_pid)->status == STOPPED)
-          break;
-      }
+      waitfg(child_pid);
       if (GetJobByPid(fg_job)->status != STOPPED)
         MarkAs(fg_job, TERMINATED);
     }
   }
+}
+
+void waitfg(pid_t pid) {
+    while (waitpid(pid, NULL, WNOHANG|WUNTRACED) == 0) {
+        if (GetJobByPid(pid)->status == STOPPED)
+            break;
+    }
 }
 
 static void addjob(commandT* cmd, pid_t child_pid, bool was_bg)
@@ -317,19 +323,60 @@ static void RunBuiltInCmd(commandT* cmd)
     PrintJobsInReverse(bgjobs);
   }
   else if(strncmp(cmd->argv[0], "cd", 2) == 0) {
-    if (!chdir(cmd->argv[1]))
-      printf("Error changing directory\n");
-  } /*
-  else if(strncmp(cmd->argv[0], "fg", 2) == 0) {
-    bgjobL *curr = bgjobs;
-    kill(curr->pid, SIGCONT);
-    wait(&curr->pid);
-  } else if(strncmp(cmd->argv[0], "bg", 2) == 0) {
-    bgjobL *curr = bgjobs;
-    printf("[%d]  ", curr->job_no);
-    kill(curr->pid, SIGCONT);
+      if (cmd->argv[1])
+      {
+          chdir(cmd->argv[1]);
+      }
+      else
+      {
+          chdir(getenv("HOME"));
+      }
   }
-  */
+
+  else if(strncmp(cmd->argv[0], "fg", 2) == 0) {
+      
+      bgjobL *curr = bgjobs;
+      
+      if (cmd->argv[1]) {
+          int job_n = atoi(cmd->argv[1]);
+          while (curr && (curr->status != STOPPED) && (curr->job_no != job_n)) {
+              curr = curr->next;
+          }
+      } else {
+          while (curr && (curr->status != STOPPED)) {
+              curr = curr->next;
+          }
+      }
+      
+      if (curr) {
+          kill(-(curr->pid), SIGCONT);
+          curr->status = RUNNING;
+          waitfg(curr->pid);
+          curr->status = TERMINATED;
+      }
+      
+  } else if(strncmp(cmd->argv[0], "bg", 2) == 0) {
+    
+      bgjobL *curr = bgjobs;
+      
+      if (cmd->argv[1]) {
+          int job_n = atoi(cmd->argv[1]);
+          while (curr && (curr->status != STOPPED) && (curr->job_no != job_n)) {
+              curr = curr->next;
+          }
+      } else {
+          while (curr && (curr->status != STOPPED)) {
+              curr = curr->next;
+          }
+      }
+      
+      if (curr) {
+          kill(-(curr->pid), SIGCONT);
+          curr->status = RUNNING;
+      }
+
+  }
+    
 }
 
 void PrintJobsInReverse(bgjobL *job)
@@ -379,6 +426,8 @@ void PrintJob(bgjobL *job)
     status = "Done   ";
 
   if (job->status != TERMINATED) {
+    if (strncmp (status, "Done   "))
+        job->status = TERMINATED;
     printf("[%d]   %s                   %s", job->job_no, status, job->cmdline);
     if (job->was_bg && job->status == RUNNING)
       printf("&");
