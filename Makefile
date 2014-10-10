@@ -3,7 +3,7 @@
 # File:         Makefile
 # RCS:          $Id: Makefile,v 1.2 2005/10/14 03:52:59 sbirrer Exp $
 # Description:  Guess
-# Author:       Fabian E. Bustamante
+# Author:       Alex Kowalczuk and Nick Hall
 #               Northwestern Systems Research Group
 #               Department of Computer Science
 #               Northwestern University
@@ -18,7 +18,7 @@
 ###############################################################################
 
 # handin info
-TEAM = `whoami`
+TEAM = "ask630+ndh242"
 VERSION = `date +%Y%m%d%H%M%S`
 PROJ = tsh
 
@@ -31,7 +31,7 @@ TAR = tar cvf
 COMPRESS = gzip
 CFLAGS = -g -Wall -O2 -D HAVE_CONFIG_H
 
-DELIVERY = Makefile *.h *.c test_type
+DELIVERY = Makefile *.h *.c test_type tsh.1
 PROGS = tsh
 SRCS = interpreter.c io.c runtime.c tsh.c
 OBJS = ${SRCS:.c=.o}

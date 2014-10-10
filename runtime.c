@@ -73,6 +73,7 @@ typedef struct bgjob_l {
   pid_t pid;
   status_no status;
   bool was_bg;
+  bool backgrounded;
   struct bgjob_l* next;
 } bgjobL;
 
@@ -323,61 +324,63 @@ static void RunBuiltInCmd(commandT* cmd)
     PrintJobsInReverse(bgjobs);
   }
   else if(strncmp(cmd->argv[0], "cd", 2) == 0) {
-      if (cmd->argv[1])
-      {
-          chdir(cmd->argv[1]);
-      }
-      else
-      {
-          chdir(getenv("HOME"));
-      }
+
+    char* dir;
+    if (cmd->argv[1])
+      dir = cmd->argv[1];
+    else
+      dir = getenv("HOME");
+    if(chdir(dir) != 0) {
+      printf("Error changing dir\n");
+    }
   }
 
   else if(strncmp(cmd->argv[0], "fg", 2) == 0) {
-      
-      bgjobL *curr = bgjobs;
-      
-      if (cmd->argv[1]) {
-          int job_n = atoi(cmd->argv[1]);
-          while (curr && (curr->status != STOPPED) && (curr->job_no != job_n)) {
-              curr = curr->next;
-          }
-      } else {
-          while (curr && (curr->status != STOPPED)) {
-              curr = curr->next;
-          }
-      }
-      
-      if (curr) {
-          kill(-(curr->pid), SIGCONT);
-          curr->status = RUNNING;
-          fg_job = curr->pid;
-          waitfg(curr->pid);
-      }
-      
-  } else if(strncmp(cmd->argv[0], "bg", 2) == 0) {
-    
-      bgjobL *curr = bgjobs;
-      
-      if (cmd->argv[1]) {
-          int job_n = atoi(cmd->argv[1]);
-          while (curr && (curr->status != STOPPED) && (curr->job_no != job_n)) {
-              curr = curr->next;
-          }
-      } else {
-          while (curr && (curr->status != STOPPED)) {
-              curr = curr->next;
-          }
-      }
-      
-      if (curr) {
-          kill(-(curr->pid), SIGCONT);
-          curr->was_bg = 1;
-          curr->status = RUNNING;
-      }
 
+    bgjobL *curr = bgjobs;
+
+    if (cmd->argv[1]) {
+      int job_n = atoi(cmd->argv[1]);
+      while (curr && (curr->status != STOPPED) && (curr->job_no != job_n)) {
+        curr = curr->next;
+      }
+    } else {
+      while (curr && (curr->status != STOPPED)) {
+        curr = curr->next;
+      }
+    }
+
+    if (curr) {
+      kill(-(curr->pid), SIGCONT);
+      curr->status = RUNNING;
+      fg_job = curr->pid;
+      waitfg(curr->pid);
+      if (curr->status != STOPPED)
+        curr->status = TERMINATED;
+    }
+
+  } else if(strncmp(cmd->argv[0], "bg", 2) == 0) {
+
+    bgjobL *curr = bgjobs;
+
+    if (cmd->argv[1]) {
+      int job_n = atoi(cmd->argv[1]);
+      while (curr && (curr->status != STOPPED) && (curr->job_no != job_n)) {
+        curr = curr->next;
+      }
+    } else {
+      while (curr && (curr->status != STOPPED)) {
+        curr = curr->next;
+      }
+    }
+
+    if (curr) {
+      kill(-(curr->pid), SIGCONT);
+      curr->was_bg = 1;
+      curr->backgrounded = 1;
+      curr->status = RUNNING;
+    }
   }
-    
 }
 
 void PrintJobsInReverse(bgjobL *job)
@@ -423,15 +426,21 @@ void PrintJob(bgjobL *job)
     status = "Running";
   else if (job->status == STOPPED)
     status = "Stopped";
-  else
+  else if (job->was_bg)
     status = "Done   ";
+  else
+    job->status = TERMINATED;
 
   if (job->status != TERMINATED) {
-    if (!strncmp(status, "Done", 4))
+    if (job->status == DONE)
         job->status = TERMINATED;
     printf("[%d]   %s                   %s", job->job_no, status, job->cmdline);
-    if (job->was_bg && job->status == RUNNING)
-      printf(" &");
+    if (job->was_bg && job->status == RUNNING) {
+      if (job->backgrounded)
+        // if we restart the job, it didn't have the space on the end, so add it
+        printf(" ");
+      printf("&");
+    }
     printf("\n");
     fflush(stdout);
   }
@@ -464,21 +473,20 @@ void ReleaseCmdT(commandT **cmd){
 }
 
 void StopFgProc() {
-  if (fg_job) {
+  if (fg_job && (GetJobByPid(fg_job)->status == RUNNING)) {
       kill(fg_job, SIGTSTP);
       printf("\n");
       fflush(stdout);
       MarkAs(fg_job, STOPPED);
       GetJobByPid(fg_job)->was_bg = 1;
       PrintJob(GetJobByPid(fg_job));
-      
   }
 }
 
 void TerminateFgProc() {
-  if (fg_job) {
+  if (fg_job && (GetJobByPid(fg_job)->status == RUNNING)) {
     kill(-fg_job, SIGINT);
-    MarkAs(fg_job, DONE);
+    MarkAs(fg_job, TERMINATED);
   }
 }
 
