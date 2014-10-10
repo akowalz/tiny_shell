@@ -351,8 +351,8 @@ static void RunBuiltInCmd(commandT* cmd)
       if (curr) {
           kill(-(curr->pid), SIGCONT);
           curr->status = RUNNING;
+          fg_job = curr->pid;
           waitfg(curr->pid);
-          curr->status = TERMINATED;
       }
       
   } else if(strncmp(cmd->argv[0], "bg", 2) == 0) {
@@ -372,6 +372,7 @@ static void RunBuiltInCmd(commandT* cmd)
       
       if (curr) {
           kill(-(curr->pid), SIGCONT);
+          curr->was_bg = 1;
           curr->status = RUNNING;
       }
 
@@ -426,11 +427,11 @@ void PrintJob(bgjobL *job)
     status = "Done   ";
 
   if (job->status != TERMINATED) {
-    if (strncmp (status, "Done   "))
+    if (!strncmp(status, "Done", 4))
         job->status = TERMINATED;
     printf("[%d]   %s                   %s", job->job_no, status, job->cmdline);
     if (job->was_bg && job->status == RUNNING)
-      printf("&");
+      printf(" &");
     printf("\n");
     fflush(stdout);
   }
@@ -464,14 +465,13 @@ void ReleaseCmdT(commandT **cmd){
 
 void StopFgProc() {
   if (fg_job) {
-    if (kill(fg_job, SIGTSTP) != 0)
-      printf("Error in kill\n");
-    else {
+      kill(fg_job, SIGTSTP);
       printf("\n");
       fflush(stdout);
       MarkAs(fg_job, STOPPED);
+      GetJobByPid(fg_job)->was_bg = 1;
       PrintJob(GetJobByPid(fg_job));
-    }
+      
   }
 }
 
