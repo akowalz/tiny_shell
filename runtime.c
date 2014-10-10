@@ -70,7 +70,6 @@ typedef struct bgjob_l {
   int job_no;
   char **argv;
   char *cmdline;
-  int argc;
   pid_t pid;
   status_no status;
   bool was_bg;
@@ -247,10 +246,11 @@ static void Exec(commandT* cmd, bool forceFork)
       fg_job = child_pid;
       sigprocmask(SIG_UNBLOCK, &mask, NULL);
       while (waitpid(child_pid, NULL, WNOHANG|WUNTRACED) == 0) {
-
+        if (GetJobByPid(child_pid)->status == STOPPED)
+          break;
       }
       if (GetJobByPid(fg_job)->status != STOPPED)
-        MarkAs(fg_job, DONE);
+        MarkAs(fg_job, TERMINATED);
     }
   }
 }
@@ -272,7 +272,7 @@ int findLowestJobNo()
   bgjobL *curr = bgjobs;
   int num = 1;
   while (curr != NULL) {
-    if (curr->status != DONE) {// && curr->status != TERMINATED) {
+    if (curr->status != DONE && curr->status != TERMINATED) {
       if (curr->job_no >= num)
         num = curr->job_no + 1;
     }
@@ -339,11 +339,7 @@ void PrintJobsInReverse(bgjobL *job)
 
   PrintJobsInReverse(job->next);
 
-  if (job->status == STOPPED) {
-    PrintJob(job);
-  } else if (job->status == RUNNING) {
-    PrintJob(job);
-  }
+  PrintJob(job);
 }
 
 void freeAllJobs()
@@ -363,11 +359,10 @@ void CheckJobs()
 
   while (curr != NULL) {
     if(curr->was_bg &&
-      (waitpid(curr->pid, NULL, WNOHANG|WUNTRACED) < 0) &&
-      (curr->status != DONE))
+      (curr->status == DONE))
       {
-        curr->status = DONE;
         PrintJob(curr);
+        curr->status = TERMINATED;
       }
     curr=curr->next;
   }
@@ -381,13 +376,15 @@ void PrintJob(bgjobL *job)
   else if (job->status == STOPPED)
     status = "Stopped";
   else
-    status = "Done";
+    status = "Done   ";
 
-  printf("[%d]   %s                   %s", job->job_no, status, job->cmdline);
-  if (job->was_bg && job->status == RUNNING)
-    printf("&");
-  printf("\n");
-  fflush(stdout);
+  if (job->status != TERMINATED) {
+    printf("[%d]   %s                   %s", job->job_no, status, job->cmdline);
+    if (job->was_bg && job->status == RUNNING)
+      printf("&");
+    printf("\n");
+    fflush(stdout);
+  }
 }
 
 commandT* CreateCmdT(int n)
@@ -418,7 +415,7 @@ void ReleaseCmdT(commandT **cmd){
 
 void StopFgProc() {
   if (fg_job) {
-    if (kill(-fg_job, SIGTSTP) != 0)
+    if (kill(fg_job, SIGTSTP) != 0)
       printf("Error in kill\n");
     else {
       printf("\n");
@@ -431,14 +428,11 @@ void StopFgProc() {
 
 void TerminateFgProc() {
   if (fg_job) {
-    if (kill(fg_job, SIGINT) != 0)
-      printf("kill error\n");
-    else
-      MarkAs(fg_job, DONE);
+    kill(-fg_job, SIGINT);
+    MarkAs(fg_job, DONE);
   }
 }
 
-/*
 void SigChldHandler() {
   int status, pid;
   while((pid = waitpid(-1, &status, WNOHANG|WUNTRACED)) > 0) {
@@ -447,4 +441,3 @@ void SigChldHandler() {
     }
   }
 }
-*/

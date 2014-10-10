@@ -70,7 +70,7 @@ static void sig(int signo)
     StopFgProc();
   }
   else if (signo == SIGCHLD) {
-    // SigChldHandler();
+    SigChldHandler();
   }
 }
 
