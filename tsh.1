@@ -1,0 +1,51 @@
+TSH(1)                     User Manuals
+
+
+
+NAME
+      tsh - Tiny Shell
+
+SYNOPSIS
+      Usage:
+
+      $ ./tsh
+
+DESCRIPTION
+      tsh is a simple command line interpreter with job control mimicing that of bash.
+
+COMMANDS
+      The following builtin commands are built into tsh
+
+      cd - changes the current directory
+
+      fg - resume the most recently stopped job and bring it to the foreground.
+           Supply an argument to fg to bring the job with that number to the
+           foreground.
+
+      bg - resume the most recently stopped job without bringing it to the foreground.
+           Supply an argument to bg to resume the execution of that job.
+
+      jobs - list all jobs, running or stopped
+
+DESIGN
+
+    tsh uses a linked list job control structure to keep track of running and
+    stopped jobs.  All jobs are given a job number and a status integer, one of
+    RUNNING, STOPPED, DONE, and TERMINATED.  The difference between DONE and
+    TERMINATED is simply that backgrounded jobs finishing should only notify the
+    user that they have finished once.  So when a background job is done, it is
+    marked DONE, then once it gets printed, it is marked as TERMINATED.
+    Foreground jobs go straight from DONE to TERMINATED.
+
+    All jobs are kept in the list until the exit of the shell, when they are all
+    freed. The status integer is used to avoid printing jobs that are already
+    done.
+
+    A global variable is used to keep track of the job currently running in the
+    foreground.  This is used mainly for convenience, and in conjunction with a
+    method that looks up a job in the joblist using a pid, and makes it simple
+    to grab the pid of the job that was running in the foreground.
+
+AUTHORS
+     Alex Kowalczuk and Nick Hall
+
